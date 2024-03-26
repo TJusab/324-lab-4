@@ -2,6 +2,7 @@
 
 .equ PIXEL_ADDR, 0xC8000000
 .equ CHAR_ADDR, 0xC9000000
+.equ PS2_REG, 0xFF200100
 .equ WIDTH, 300				// don't forget to add 19
 .equ HEIGHT, 219
 .equ CHAR_X_MAX, 79
@@ -41,7 +42,8 @@ VGA_draw_point_ASM:
 	CMP R1, #HEIGHT
 	BGT quit
 	
-	LSL R1, R1, #9
+	LSL R1, R1, #10
+	LSL R0, R0, #1
 	ADD R0, R0, R1
 	
 	// Calculate the memory location
