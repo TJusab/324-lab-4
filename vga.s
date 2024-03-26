@@ -49,7 +49,7 @@ VGA_draw_point_ASM:
 	// Calculate the memory location
 	ADD R3, R3, R0
 	
-	STRB R2, [R3]
+	STRH R2, [R3]
 	BX LR
 
 // sets to 0 all valid memory locations --> calls VGA_draw_point_ASM with c = 0
