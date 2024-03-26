@@ -4,7 +4,7 @@
 .equ CHAR_ADDR, 0xC9000000
 .equ PS2_REG, 0xFF200100
 .equ WIDTH, 300				// don't forget to add 19
-.equ HEIGHT, 219
+.equ HEIGHT, 239
 .equ CHAR_X_MAX, 79
 .equ CHAR_Y_MAX, 59
 
@@ -67,7 +67,7 @@ outer_loop:
 	
 	MOV R4, #WIDTH
 	ADD R4, R4, #19
-	CMP R0, #WIDTH
+	CMP R0, R4
 	BGE quit
 	POP {R4, LR}
 	BX LR
