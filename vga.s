@@ -18,22 +18,16 @@ end:
 // pre-- R1: y coordinate
 // pre-- R2: color c
 // post-- R0: store the color in pixel buffer
-
 VGA_draw_point_ASM:
-	PUSH {R4, LR}
-	LDR R3, =PIXEL_ADDR
-	
+	PUSH {R4-R7, LR}
 	// Check x coordinate
 	CMP R0, #0			// if x < 0, exit
-	POP {R4, LR}
 	BLT quit
 	
 	// TODO: How to check for larger ImmValues
-	PUSH {R4, LR}
 	MOV R4, #WIDTH
 	ADD R4, R4, #19
 	CMP R0, R4		// if x > 319, exit
-	POP {R4, LR}
 	BGT quit
 	
 	// Check y coordinate
@@ -42,52 +36,42 @@ VGA_draw_point_ASM:
 	CMP R1, #HEIGHT
 	BGT quit
 	
-	LSL R1, R1, #10
-	LSL R0, R0, #1
-	ADD R0, R0, R1
-	
-	// Calculate the memory location
-	ADD R3, R3, R0
-	
-	STRH R2, [R3]
+	LSL R4, R0, #1
+	LSL R5, R1, #10
+	LDR R6, =PIXEL_ADDR
+	ORR R7, R4, R5
+	ORR R7, R7, R6
+	STRH R2, [R7]
+	POP {R4-R7, LR}
 	BX LR
-
-// sets to 0 all valid memory locations --> calls VGA_draw_point_ASM with c = 0
+	
 VGA_clear_pixelbuff_ASM:
+	PUSH {R4, R6, LR}
+	LDR R6, =PIXEL_ADDR
 	MOV R0, #0
 	MOV R1, #0
 	MOV R2, #0
-	
-	PUSH {LR}
-	BL outer_loop
-	POP {LR}
 
-outer_loop:
-	PUSH {R4, LR}
-	
-	MOV R4, #WIDTH
-	ADD R4, R4, #19
-	CMP R0, R4
-	BGE quit
-	POP {R4, LR}
+	outer_loop:
+		MOV R1, #0
+		inner_loop:
+			BL VGA_draw_point_ASM
+			ADD R1, R1, #1
+			CMP R1, #HEIGHT
+			BLE inner_loop
+		ADD R0, R0, #1
+		MOV R4, #WIDTH
+		ADD R4, R4, #19
+		CMP R0, R4
+		BLE outer_loop
+		
+	POP {R4, R6, LR}
 	BX LR
-	
-inner_loop:
-	CMP R1, #HEIGHT
-	BGE inner_loop_exit
-	BL VGA_draw_point_ASM
-	ADD R1, R1, #1
-	B inner_loop
-	
-inner_loop_exit:
-	ADD R0, R0, #1
-	B outer_loop
 
 // writes the ASCII code c to the screen at (x, y)
 VGA_write_char_ASM:
-	LDR R3, =CHAR_ADDR
-	
-	PUSH {LR}
+	PUSH {R4-R7, LR}
+	LDR R6, =CHAR_ADDR
 	// check x coordinate
 	CMP R0, #0
 	BLT quit
@@ -100,42 +84,36 @@ VGA_write_char_ASM:
 	CMP R1, #CHAR_Y_MAX
 	BGT quit
 	
-	LSL R1, R1, #7
-	ADD R0, R0, R1
+	LSL R4, R0, #0
+	LSL R5, R1, #7
+	ORR R7, R4, R5
+	ORR R7, R7, R6
+	STRB R2, [R7]
 	
-	// Calculate the memory location
-	ADD R3, R3, R0
-	STRB R2, [R3]
-	POP {LR}
+	POP {R4-R7, LR}
 	BX LR
 	
 // sets to 0 --> call VGA_write_char_ASM with c = 0 for every valid location
 VGA_clear_charbuff_ASM:
+	PUSH {R4, R6, LR}
+	LDR R6, =CHAR_ADDR
 	MOV R0, #0
 	MOV R1, #0
 	MOV R2, #0
-	
-	PUSH {LR}
-	BL outer_loop_charbuff
-	POP {LR}
 
-outer_loop_charbuff:
-	PUSH {LR}
-	CMP R0, #CHAR_X_MAX
-	BGE quit
-	POP {LR}
+	outer_loop_charbuff:
+		MOV R1, #0
+		inner_loop_charbuff:
+			BL VGA_draw_point_ASM
+			ADD R1, R1, #1
+			CMP R1, #CHAR_Y_MAX
+			BLE inner_loop_charbuff
+		ADD R0, R0, #1
+		CMP R0, #CHAR_X_MAX
+		BLE outer_loop_charbuff
+		
+	POP {R4, R6, LR}
 	BX LR
-	
-inner_loop_charbuff:
-	CMP R1, #CHAR_Y_MAX
-	BGE inner_loop_charbuff_exit
-	BL VGA_write_char_ASM
-	ADD R1, R1, #1
-	B inner_loop_charbuff
-	
-inner_loop_charbuff_exit:
-	ADD R0, R0, #1
-	B outer_loop_charbuff
 
 quit:
 	BX LR
