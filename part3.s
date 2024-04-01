@@ -1,222 +1,130 @@
 .global _start
 
 _start:
+
+    // pre-- A1: x1
+    // pre-- A2: y1
+    // pre-- A3: x2
+    // pre-- A4: y2
+    // pre-- V1: color c
+    MOV A1, #10
+    MOV A2, #0
+    MOV A3, #10
+    LDR A4, =#239
+    MOV V1, #0
+    BL VGA_draw_line_ASM
+
+    
+    // pre-- A1: x1
+    // pre-- A2: y1
+    // pre-- A3: x2
+    // pre-- A4: y2
+    // pre-- V1: color c
+    LDR A1, =#319
+    MOV A2, #10
+    MOV A3, #0
+    MOV A4, #10
+    MOV V1, #0
+    BL VGA_draw_line_ASM
     
 end:
     b end
 
 
+//------------------------// Part3 - Game of Life subroutines (GoL) //------------------------//
 
-//------------------------// VGA driver //------------------------//
-.equ PIXEL_ADDR, 0xC8000000
-.equ CHAR_ADDR, 0xC9000000
-.equ PS2_REG, 0xFF200100
-.equ WIDTH, 300				// don't forget to add 19
-.equ HEIGHT, 239
-.equ CHAR_X_MAX, 79
-.equ CHAR_Y_MAX, 59
-	
-// draws a point on the screen at the specified (x, y) in color c
-// pre-- R0: x coordinate
-// pre-- R1: y coordinate
-// pre-- R2: color c
-// post-- R0: store the color in pixel buffer
-VGA_draw_point_ASM:
-	PUSH {R4-R7, LR}
-	// Check x coordinate
-	CMP R0, #0			// if x < 0, exit
-	BLT quit
-	
-	// TODO: How to check for larger ImmValues
-	MOV R4, #WIDTH
-	ADD R4, R4, #19
-	CMP R0, R4		// if x > 319, exit
-	BGT quit
-	
-	// Check y coordinate
-	CMP R1, #0
-	BLT quit
-	CMP R1, #HEIGHT
-	BGT quit
-	
-	LSL R4, R0, #1
-	LSL R5, R1, #10
-	LDR R6, =PIXEL_ADDR
-	ORR R7, R4, R5
-	ORR R7, R7, R6
-	STRH R2, [R7]
-	POP {R4-R7, LR}
-	BX LR
-	
-VGA_clear_pixelbuff_ASM:
-	PUSH {R4, R6, LR}
-	LDR R6, =PIXEL_ADDR
-	MOV R0, #0
-	MOV R1, #0
-	MOV R2, #0
+// draws a line on the screen from (x1, y1) to (x2, y2) in the color c
+// where where either x1 = x2 (a vertical line) or y1 = y2 (a horizontal line)
+// pre-- A1: x1
+// pre-- A2: y1
+// pre-- A3: x2
+// pre-- A4: y2
+// pre-- V1: color c
+VGA_draw_line_ASM:
+    PUSH {A1-V1, LR}
+    // Check vertical or horizontal:
+    CMP A1, A3 // same x's ?
+    BNE not_vertical_line
+        BL VGA_draw_vertical_line
+        B succesfully_drew_line
+    not_vertical_line:
 
-	outer_loop:
-		MOV R1, #0
-		inner_loop:
-			BL VGA_draw_point_ASM
-			ADD R1, R1, #1
-			CMP R1, #HEIGHT
-			BLE inner_loop
-		ADD R0, R0, #1
-		MOV R4, #WIDTH
-		ADD R4, R4, #19
-		CMP R0, R4
-		BLE outer_loop
-		
-	POP {R4, R6, LR}
-	BX LR
+    // if its not vertical check if its horizontal (same y's)
+    CMP A2, A4
+    BNE error_line
+        BL VGA_draw_horizontal_line
+        B succesfully_drew_line
 
-// writes the ASCII code c to the screen at (x, y)
-VGA_write_char_ASM:
-	PUSH {R4-R7, LR}
-	LDR R6, =CHAR_ADDR
-	// check x coordinate
-	CMP R0, #0
-	BLT quit
-	CMP R0, #CHAR_X_MAX
-	BGT quit
-	
-	// check y coordinate
-	CMP R1, #0
-	BLT quit
-	CMP R1, #CHAR_Y_MAX
-	BGT quit
-	
-	LSL R4, R0, #0
-	LSL R5, R1, #7
-	ORR R7, R4, R5
-	ORR R7, R7, R6
-	STRB R2, [R7]
-	
-	POP {R4-R7, LR}
-	BX LR
-	
-// sets to 0 --> call VGA_write_char_ASM with c = 0 for every valid location
-VGA_clear_charbuff_ASM:
-	PUSH {R4, R6, LR}
-	LDR R6, =CHAR_ADDR
-	MOV R0, #0
-	MOV R1, #0
-	MOV R2, #0
+    // Catch if subroutine called with wrong arguments
+    error_line:
+        B error_line // infinite loop so stop here
 
-	outer_loop_charbuff:
-		MOV R1, #0
-		inner_loop_charbuff:
-			BL VGA_draw_point_ASM
-			ADD R1, R1, #1
-			CMP R1, #CHAR_Y_MAX
-			BLE inner_loop_charbuff
-		ADD R0, R0, #1
-		CMP R0, #CHAR_X_MAX
-		BLE outer_loop_charbuff
-		
-	POP {R4, R6, LR}
-	BX LR
+    succesfully_drew_line:
+    POP {A1-V1, LR}
+    BX LR
 
-quit:
-	BX LR
+// pre-- A1: x1
+// pre-- A2: y1
+// pre-- A4: y2
+// pre-- V1: color c
+VGA_draw_vertical_line:
+    PUSH {A1-V1, LR}
+    // make sure y1(A2) is the smallest number (A2<=A4: y1<=y2)
+    CMP A2, A4
+    BLE do_not_switch_y
+        // if GT: y1>y2, switch the values
+        ADD A3, A2, #0 // Save temp=A2
+        ADD A2, A4, #0 // A2=A4
+        ADD A4, A3, #0 // A4=temp
+    do_not_switch_y:
 
-draw_test_screen:
-        push    {r4, r5, r6, r7, r8, r9, r10, lr}
-        bl      VGA_clear_pixelbuff_ASM
-        bl      VGA_clear_charbuff_ASM
-        mov     r6, #0
-        ldr     r10, .draw_test_screen_L8
-        ldr     r9, .draw_test_screen_L8+4
-        ldr     r8, .draw_test_screen_L8+8
-        b       .draw_test_screen_L2
-.draw_test_screen_L7:
-        add     r6, r6, #1
-        cmp     r6, #320
-        beq     .draw_test_screen_L4
-.draw_test_screen_L2:
-        smull   r3, r7, r10, r6
-        asr     r3, r6, #31
-        rsb     r7, r3, r7, asr #2
-        lsl     r7, r7, #5
-        lsl     r5, r6, #5
-        mov     r4, #0
-.draw_test_screen_L3:
-        smull   r3, r2, r9, r5
-        add     r3, r2, r5
-        asr     r2, r5, #31
-        rsb     r2, r2, r3, asr #9
-        orr     r2, r7, r2, lsl #11
-        lsl     r3, r4, #5
-        smull   r0, r1, r8, r3
-        add     r1, r1, r3
-        asr     r3, r3, #31
-        rsb     r3, r3, r1, asr #7
-        orr     r2, r2, r3
-        mov     r1, r4
-        mov     r0, r6
-        bl      VGA_draw_point_ASM
-        add     r4, r4, #1
-        add     r5, r5, #32
-        cmp     r4, #240
-        bne     .draw_test_screen_L3
-        b       .draw_test_screen_L7
-.draw_test_screen_L4:
-        mov     r2, #72
-        mov     r1, #5
-        mov     r0, #20
-        bl      VGA_write_char_ASM
-        mov     r2, #101
-        mov     r1, #5
-        mov     r0, #21
-        bl      VGA_write_char_ASM
-        mov     r2, #108
-        mov     r1, #5
-        mov     r0, #22
-        bl      VGA_write_char_ASM
-        mov     r2, #108
-        mov     r1, #5
-        mov     r0, #23
-        bl      VGA_write_char_ASM
-        mov     r2, #111
-        mov     r1, #5
-        mov     r0, #24
-        bl      VGA_write_char_ASM
-        mov     r2, #32
-        mov     r1, #5
-        mov     r0, #25
-        bl      VGA_write_char_ASM
-        mov     r2, #87
-        mov     r1, #5
-        mov     r0, #26
-        bl      VGA_write_char_ASM
-        mov     r2, #111
-        mov     r1, #5
-        mov     r0, #27
-        bl      VGA_write_char_ASM
-        mov     r2, #114
-        mov     r1, #5
-        mov     r0, #28
-        bl      VGA_write_char_ASM
-        mov     r2, #108
-        mov     r1, #5
-        mov     r0, #29
-        bl      VGA_write_char_ASM
-        mov     r2, #100
-        mov     r1, #5
-        mov     r0, #30
-        bl      VGA_write_char_ASM
-        mov     r2, #33
-        mov     r1, #5
-        mov     r0, #31
-        bl      VGA_write_char_ASM
-        pop     {r4, r5, r6, r7, r8, r9, r10, pc}
-.draw_test_screen_L8:
-        .word   1717986919
-        .word   -368140053
-        .word   -2004318071
+    ADD A3, V1, #0 // Move color(V1) into R2
+    
+    // loop which draw every points from y1 to y2
+    loop_draw_each_points_on_the_vertical_line:
+        BL VGA_draw_point_ASM // draw
+        ADD A2, A2, #1 // increment A2 (y1++)
+        CMP A2, A4  // check if y1<=y2, if yes continue drawing points
+        BLE loop_draw_each_points_on_the_vertical_line
 
-//------------------------// PS2 driver //------------------------//
+    POP {A1-V1, LR}
+    BX LR
+
+
+// pre-- A1: x1
+// pre-- A2: y1
+// pre-- A3: x2
+// pre-- V1: color c
+VGA_draw_horizontal_line:
+    PUSH {A1-V1, LR}
+    // make sure x1(A1) is the smallest number (A1<=A3: x1<=x2)
+    CMP A1, A3
+    BLE do_not_switch_x
+        // if GT: x1>x2, switch the values
+        ADD A4, A1, #0 // Save temp(A4)=A1
+        ADD A1, A3, #0 // A1=A3
+        ADD A3, A4, #0 // A3=temp(A4)
+    do_not_switch_x:
+    
+    // loop which draw every points from y1 to y2
+    loop_draw_each_points_on_the_horizontal_line:
+        // pre-- R0: x coordinate
+        // pre-- R1: y coordinate
+        // pre-- R2: color c
+        PUSH {A3} // we need to put into A3/R2 the color
+        ADD A3, V1, #0 // Move color(V1) into R2
+        BL VGA_draw_point_ASM // draw
+        POP {A3} // we need to remember x2
+
+        ADD A1, A1, #1 // increment A1 (x1++)
+        CMP A1, A3  // check if x1<=x2, if yes continue drawing points
+        BLE loop_draw_each_points_on_the_horizontal_line
+
+    POP {A1-V1, LR}
+    BX LR
+
+//------------------------// VGA & PS2 drivers //------------------------//
+
 .equ PIXEL_ADDR, 0xC8000000
 .equ CHAR_ADDR, 0xC9000000
 .equ PS2_REG, 0xFF200100
@@ -225,13 +133,14 @@ draw_test_screen:
 .equ CHAR_X_MAX, 79
 .equ CHAR_Y_MAX, 59 
 
+@ TODO: copy VGA driver here.
 // draws a point on the screen at the specified (x, y) in color c
 // pre-- R0: x coordinate
 // pre-- R1: y coordinate
 // pre-- R2: color c
 // post-- R0: store the color in pixel buffer
 VGA_draw_point_ASM:
-	PUSH {R4-R7, LR}
+	PUSH {R0-R7, LR}
 	// Check x coordinate
 	CMP R0, #0			// if x < 0, exit
 	BLT quit
@@ -254,7 +163,7 @@ VGA_draw_point_ASM:
 	ORR R7, R4, R5
 	ORR R7, R7, R6
 	STRH R2, [R7]
-	POP {R4-R7, LR}
+	POP {R0-R7, LR}
 	BX LR
 	
 VGA_clear_pixelbuff_ASM:
