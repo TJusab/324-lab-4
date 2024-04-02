@@ -45,8 +45,12 @@ _start:
     MOV V1, #0
     BL VGA_draw_rect_ASM
     
+    MOV A1, #15
+    MOV A2, #11
+    BL GoL_fill_gridxy_ASM
 end:
     b end
+
 
 
 //------------------------// Part3 - Game of Life subroutines (GoL) //------------------------//
@@ -220,6 +224,7 @@ GoL_draw_grid_ASM:
 // pre-- A4: y2
 // pre-- V1: color c
 VGA_draw_rect_ASM:
+    PUSH {A1-V1, LR}
     // pre-- A1: x1
     // pre-- A2: y1
     // pre-- A3: x2
@@ -231,7 +236,35 @@ VGA_draw_rect_ASM:
         CMP A2, A4 // if x1<=239, keep drawing vertical lines
         BLE loop_draw_rectangle
 
+    POP {A1-V1, LR}
     BX LR
+
+// Fills the rectangle of grid location (x, y) with color c
+// Grid: 0 ≤ x < 16, 0 ≤ y < 12
+// Pre-- A1: x
+// Pre-- A2: y
+// Pre-- V1: color
+// during V2: temp holds 20
+GoL_fill_gridxy_ASM:
+    PUSH {A1-V2, LR}
+    MOV V2, #20
+    // pre-- A1: x1
+    MUL A1, A1, V2 // x * 20
+    // pre-- A2: y1
+    MUL A2, A2, V2 // y * 20
+
+    SUB V2, V2, #1
+    // pre-- A3: x2
+    ADD A3, A1, V2 // x * 20 + 19 = x2
+    // pre-- A4: y2
+    ADD A4, A2, V2 // y * 20 + 19 = y2
+    // pre-- V1: color c
+    BL VGA_draw_rect_ASM
+
+    POP {A1-V2, LR}
+    BX LR
+
+
 
 
 //------------------------// VGA & PS2 drivers //------------------------//
