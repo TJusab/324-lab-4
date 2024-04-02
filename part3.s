@@ -2,7 +2,7 @@
 
 _start:
 
-    // pre-- A1: x1
+    /* // pre-- A1: x1
     // pre-- A2: y1
     // pre-- A3: x2
     // pre-- A4: y2
@@ -25,7 +25,11 @@ _start:
     MOV A3, #0
     MOV A4, #10
     MOV V1, #0
-    BL VGA_draw_line_ASM
+    BL VGA_draw_line_ASM */
+
+    MOV A1, #0
+    LDR A3, =#1366
+    BL GoL_draw_grid_ASM
     
 end:
     b end
@@ -122,6 +126,79 @@ VGA_draw_horizontal_line:
 
     POP {A1-V1, LR}
     BX LR
+
+// pre-R2/A3: Color c
+VGA_set_background:
+    PUSH {R4, R6, LR}
+	LDR R6, =PIXEL_ADDR
+	MOV R0, #0
+	MOV R1, #0
+
+	outer_loop_background:
+		MOV R1, #0
+		inner_loop_background:
+			BL VGA_draw_point_ASM
+			ADD R1, R1, #1
+			CMP R1, #HEIGHT
+			BLE inner_loop_background
+		ADD R0, R0, #1
+		MOV R4, #WIDTH
+		ADD R4, R4, #19
+		CMP R0, R4
+		BLE outer_loop_background
+		
+	POP {R4, R6, LR}
+	BX LR
+
+// Draw  a 16x12 grid on the VGA display in color c
+// Pre-- A1: color of the grid
+// Pre-- A3: color of the background
+GoL_draw_grid_ASM:
+    PUSH {A1-V1, LR}
+
+    // A3: color of the background
+    BL VGA_set_background
+
+    // pre-- V1: color c
+    ADD V1, A1, #0 // set V1 to hold the color
+
+    // draw horizontal lines
+    // pre-- A1: x1
+    MOV A1, #0 // x1 = 0
+    // pre-- A2: y1
+    MOV A2, #0 // starts drawing a line at y=0
+    // pre-- A3: x2
+    LDR A3, =#319 // x2 = 319
+
+    LDR A4, =#239 // need to load the max since value too big
+    loop_draw_every_horizontal_lines:
+        BL VGA_draw_horizontal_line
+
+        ADD A2, #20
+        CMP A2, A4 // if y1<=239, keep drawing horizontal lines
+        BLE loop_draw_every_horizontal_lines
+
+    // draw vertical lines
+    // pre-- A1: x1
+    MOV A1, #0
+    // pre-- A2: y1
+    MOV A2, #0
+    // pre-- A4: y2
+    LDR A4, =#239
+
+    LDR A3, =#319 // need to load the max since value too big
+    loop_draw_every_vertical_lines:
+        BL VGA_draw_vertical_line
+
+        ADD A1, #20
+        CMP A1, A3 // if x1<=239, keep drawing vertical lines
+        BLE loop_draw_every_vertical_lines
+
+
+    POP {A1-V1, LR}
+
+    BX LR
+
 
 //------------------------// VGA & PS2 drivers //------------------------//
 
