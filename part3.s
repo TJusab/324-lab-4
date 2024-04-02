@@ -1,5 +1,20 @@
 .global _start
 
+GoLBoard:
+//     x 0 1 2 3 4 5 6 7 8 9 a b c d e f y
+.word 0b1000000000000000 // 0
+.word 0b0000000000000000 // 1
+.word 0b0000000100000000 // 2
+.word 0b0000000100000000 // 3
+.word 0b0000000100000000 // 4
+.word 0b0000000111110000 // 5
+.word 0b0001111110000000 // 6
+.word 0b0000000010000000 // 7
+.word 0b0000000010000000 // 8
+.word 0b0000000010000000 // 9
+.word 0b0000000000000000 // a
+.word 0b0000000000000000 // b
+
 _start:
 
     /* // pre-- A1: x1
@@ -27,10 +42,9 @@ _start:
     MOV V1, #0
     BL VGA_draw_line_ASM */
 
-    MOV A1, #0
+    /* MOV A1, #0
     LDR A3, =#1366
     BL GoL_draw_grid_ASM
-
 
     // Draw rectangles from pixel (x1, y1) to (x2, y2)
     // pre-- A1: x1
@@ -47,7 +61,11 @@ _start:
     
     MOV A1, #15
     MOV A2, #11
-    BL GoL_fill_gridxy_ASM
+    BL GoL_fill_gridxy_ASM */
+
+    MOV A1, #0
+    LDR A3, =#1366
+    BL GoL_draw_board_ASM
 end:
     b end
 
@@ -262,6 +280,51 @@ GoL_fill_gridxy_ASM:
     BL VGA_draw_rect_ASM
 
     POP {A1-V2, LR}
+    BX LR
+
+// Read GoLBoard and fills grid locations (x, y), 0 ≤ x < 16, 0 ≤ y < 12 with color c if GoLBoard[y][x] == 1.
+// Pre-- A1: color of the grid(and fill)
+// Pre-- A3: color of the background
+GoL_draw_board_ASM:
+    PUSH {A1-V1, LR}
+    // First: Draw the grid
+    BL GoL_draw_grid_ASM
+    ADD V1, A1, #0 // V1 = A1 for GoL_fill_gridxy_ASM (Pre-- V1: color)
+
+    // Second: Draw rectangles for every 1 in GoLBoard
+    LDR A2, =GoLBoard // Start by loading the address of the board (every word is a row, so 12 rows)
+
+    MOV A4, #0 // row index
+    loop_fill_all_ones_in_GoLBoard:
+        LDR A1, [A2], #4 // Start by reading a row (a word) and post-increment the address
+        // Every last 16 bits in A1 represents the value of the cells in the row, so read last bit and right-shift:
+        MOV A3, #15 // Column index
+
+        check_each_cell_in_row:
+            TST A1, #1 // Is the least significant bit 1 ?
+            BEQ skip_filling_cell // if its not 1, skip the hex
+                // if it is one color the cell
+
+                PUSH {A1, A2} // save current values an prep the parameters
+                // Pre-- A1: x
+                ADD A1, A3, #0 // A1 = row_index(A4)
+                // Pre-- A2: y
+                ADD A2, A4, #0 // A1 = column_index(A3)
+                // Pre-- V1: color => done earlier
+                BL GoL_fill_gridxy_ASM
+                POP {A1, A2}
+
+            skip_filling_cell:
+            LSR A1, #1 // shift value to check next bit
+            SUB A3, A3, #1 // decrease column index
+            CMP A3, #0
+        BGE check_each_cell_in_row // keep looping as long as column_index>=0
+
+        ADD A4, A4, #1 // increase row index
+        CMP A4, #12
+    BLT loop_fill_all_ones_in_GoLBoard // keep looping as long as row_index<12
+
+    POP {A1-V1, LR}
     BX LR
 
 
