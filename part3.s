@@ -30,6 +30,20 @@ _start:
     MOV A1, #0
     LDR A3, =#1366
     BL GoL_draw_grid_ASM
+
+
+    // Draw rectangles from pixel (x1, y1) to (x2, y2)
+    // pre-- A1: x1
+    // pre-- A2: y1
+    // pre-- A3: x2
+    // pre-- A4: y2
+    // pre-- V1: color c
+    MOV A1, #20
+    MOV A2, #20
+    MOV A3, #40
+    MOV A4, #40
+    MOV V1, #0
+    BL VGA_draw_rect_ASM
     
 end:
     b end
@@ -150,7 +164,7 @@ VGA_set_background:
 	POP {R4, R6, LR}
 	BX LR
 
-// Draw  a 16x12 grid on the VGA display in color c
+// Draw  a 16x12 grid on the VGA display in a specified background color and grid color
 // Pre-- A1: color of the grid
 // Pre-- A3: color of the background
 GoL_draw_grid_ASM:
@@ -196,6 +210,26 @@ GoL_draw_grid_ASM:
 
 
     POP {A1-V1, LR}
+
+    BX LR
+
+// Draw rectangles from pixel (x1, y1) to (x2, y2)
+// pre-- A1: x1
+// pre-- A2: y1
+// pre-- A3: x2
+// pre-- A4: y2
+// pre-- V1: color c
+VGA_draw_rect_ASM:
+    // pre-- A1: x1
+    // pre-- A2: y1
+    // pre-- A3: x2
+    // pre-- V1: color c
+    loop_draw_rectangle:
+        BL VGA_draw_horizontal_line
+
+        ADD A2, #1
+        CMP A2, A4 // if x1<=239, keep drawing vertical lines
+        BLE loop_draw_rectangle
 
     BX LR
 
