@@ -15,57 +15,22 @@ GoLBoard:
 .word 0b0000000000000000 // a
 .word 0b0000000000000000 // b
 
+// Holds the current location of the cursor, by default (0,0)
+cursor_x: .word 1
+cursor_y: .word 1
+
+key_pressed: .word 0
+
 _start:
-
-    /* // pre-- A1: x1
-    // pre-- A2: y1
-    // pre-- A3: x2
-    // pre-- A4: y2
-    // pre-- V1: color c
-    MOV A1, #10
-    MOV A2, #0
-    MOV A3, #10
-    LDR A4, =#239
-    MOV V1, #0
-    BL VGA_draw_line_ASM
-
-    
-    // pre-- A1: x1
-    // pre-- A2: y1
-    // pre-- A3: x2
-    // pre-- A4: y2
-    // pre-- V1: color c
-    LDR A1, =#319
-    MOV A2, #10
-    MOV A3, #0
-    MOV A4, #10
-    MOV V1, #0
-    BL VGA_draw_line_ASM */
-
-    /* MOV A1, #0
-    LDR A3, =#1366
-    BL GoL_draw_grid_ASM
-
-    // Draw rectangles from pixel (x1, y1) to (x2, y2)
-    // pre-- A1: x1
-    // pre-- A2: y1
-    // pre-- A3: x2
-    // pre-- A4: y2
-    // pre-- V1: color c
-    MOV A1, #20
-    MOV A2, #20
-    MOV A3, #40
-    MOV A4, #40
-    MOV V1, #0
-    BL VGA_draw_rect_ASM
-    
-    MOV A1, #15
-    MOV A2, #11
-    BL GoL_fill_gridxy_ASM */
-
     MOV A1, #0
     LDR A3, =#1366
     BL GoL_draw_board_ASM
+main:
+    BL GoL_poll_pressed_key
+
+    b main
+
+
 end:
     b end
 
@@ -324,10 +289,231 @@ GoL_draw_board_ASM:
         CMP A4, #12
     BLT loop_fill_all_ones_in_GoLBoard // keep looping as long as row_index<12
 
+    // Finally draw cursor on top
+    BL Cursor_draw_cursor
+
     POP {A1-V1, LR}
     BX LR
 
 
+// Check for a pressed key
+GoL_poll_pressed_key:
+    PUSH {A1, A2, LR}
+    read_key_pressed:
+    LDR A1, =key_pressed
+    BL read_PS2_data_ASM // Returns value in R0
+
+    // If A1 is 1 after reading then read the key pressed
+    CMP A1, #1
+    BNE done_polling_pressed_key
+        // Read code after the release:
+        // f0 000180f0
+        LDR A1, key_pressed
+        LDR A2, =#0xf0
+        CMP A1, A2 // when its a released key, skip next key
+        BNE done_polling_pressed_key
+            read_key_released:
+            LDR A1, =key_pressed
+            BL read_PS2_data_ASM
+            CMP A1, #1
+            BNE read_key_released
+            LDR A1, key_pressed
+        
+            LDR A2, =#0x1d
+            CMP A1, A2 // check if it is W
+            BNE not_w_pressed
+                LDR A3, =cursor_y
+                LDR A4, cursor_y
+                CMP A4, #0
+                BLE done_polling_pressed_key // do not move up if y<=0
+                    SUB A4, A4, #1 // Move up
+                    STR A4, [A3] // Store new value of cursor
+                    BL Cursor_draw_cursor
+                    B done_polling_pressed_key
+            not_w_pressed:
+
+            LDR A2, =#0x1B
+            CMP A1, A2
+            BNE not_s_pressed
+                LDR A3, =cursor_y
+                LDR A4, cursor_y
+                CMP A4, #11
+                BGE done_polling_pressed_key // do not move up if y>=12
+                    ADD A4, A4, #1 // Move down
+                    STR A4, [A3] // Store new value of cursor
+                    BL Cursor_draw_cursor
+                    B done_polling_pressed_key
+            not_s_pressed:
+
+            LDR A2, =#0x1C
+            CMP A1, A2
+            BNE not_a_pressed
+                LDR A3, =cursor_x
+                LDR A4, cursor_x
+                CMP A4, #0
+                BLE done_polling_pressed_key // do not move up if x<=0
+                    SUB A4, A4, #1 // Move left
+                    STR A4, [A3] // Store new value of cursor
+                    BL Cursor_draw_cursor
+                    B done_polling_pressed_key
+            not_a_pressed:
+
+            LDR A2, =#0x23
+            CMP A1, A2
+            BNE not_d_pressed
+                LDR A3, =cursor_x
+                LDR A4, cursor_x
+                CMP A4, #15
+                BGE done_polling_pressed_key // do not move up if x>=15
+                    ADD A4, A4, #1 // Move right
+                    STR A4, [A3] // Store new value of cursor
+                    BL Cursor_draw_cursor
+                    B done_polling_pressed_key
+            not_d_pressed:
+
+    done_polling_pressed_key:
+    POP {A1, A2, LR}
+    BX LR
+
+// Draws cursor at cursor_x and at cursor_y
+// During A4: cursor_x
+// During V2: cursor_y
+Cursor_draw_cursor:
+    PUSH {A1-V3, LR}
+    LDR A4, cursor_x
+    LDR V2, cursor_y
+    MOV V3, #20
+    MUL A4, A4, V3
+    MUL V2, V2, V3
+
+    // center star:
+    ADD A4, A4, #1
+    ADD V2, V2, #1
+
+    // pre-- V1: color c
+    LDR V1, =#0b1111111000000000
+
+    // pre-- A1: x1
+    ADD A1, A4, #8
+    // pre-- A2: y1
+    ADD A2, V2, #0
+    // pre-- A3: x2
+    ADD A3, A4, #10
+    BL VGA_draw_horizontal_line
+    
+    // pre-- A1: x1
+    ADD A1, A4, #7
+    // pre-- A2: y1
+    ADD A2, V2, #1
+    // pre-- A3: x2
+    ADD A3, A4, #11
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #2
+    BL VGA_draw_horizontal_line
+    
+    // pre-- A1: x1
+    ADD A1, A4, #6
+    // pre-- A2: y1
+    ADD A2, V2, #3
+    // pre-- A3: x2
+    ADD A3, A4, #12
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #4
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #1
+    // pre-- A2: y1
+    ADD A2, V2, #5
+    // pre-- A3: x2
+    ADD A3, A4, #17
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #8
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #0
+    // pre-- A2: y1
+    ADD A2, V2, #6
+    // pre-- A3: x2
+    ADD A3, A4, #18
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #7
+    BL VGA_draw_horizontal_line
+    
+    // pre-- A1: x1
+    ADD A1, A4, #2
+    // pre-- A2: y1
+    ADD A2, V2, #9
+    // pre-- A3: x2
+    ADD A3, A4, #16
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #15
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #3
+    // pre-- A2: y1
+    ADD A2, V2, #10
+    // pre-- A3: x2
+    ADD A3, A4, #15
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #13
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #14
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #4
+    // pre-- A2: y1
+    ADD A2, V2, #11
+    // pre-- A3: x2
+    ADD A3, A4, #14
+    BL VGA_draw_horizontal_line
+    ADD A2, V2, #12
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #2
+    // pre-- A2: y1
+    ADD A2, V2, #16
+    // pre-- A3: x2
+    ADD A3, A4, #8
+    BL VGA_draw_horizontal_line
+    // pre-- A1: x1
+    ADD A1, A4, #10
+    // pre-- A3: x2
+    ADD A3, A4, #16
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #2
+    // pre-- A2: y1
+    ADD A2, V2, #17
+    // pre-- A3: x2
+    ADD A3, A4, #7
+    BL VGA_draw_horizontal_line
+    // pre-- A1: x1
+    ADD A1, A4, #11
+    // pre-- A3: x2
+    ADD A3, A4, #16
+    BL VGA_draw_horizontal_line
+
+    // pre-- A1: x1
+    ADD A1, A4, #2
+    // pre-- A2: y1
+    ADD A2, V2, #17
+    // pre-- A3: x2
+    ADD A3, A4, #6
+    BL VGA_draw_horizontal_line
+    // pre-- A1: x1
+    ADD A1, A4, #12
+    // pre-- A3: x2
+    ADD A3, A4, #16
+    BL VGA_draw_horizontal_line
+
+    POP {A1-V3, LR}
+    BX LR
 
 
 //------------------------// VGA & PS2 drivers //------------------------//
