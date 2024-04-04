@@ -233,10 +233,12 @@ GoL_fill_gridxy_ASM:
     MOV V2, #20
     // pre-- A1: x1
     MUL A1, A1, V2 // x * 20
+    ADD A1, A1, #1
     // pre-- A2: y1
     MUL A2, A2, V2 // y * 20
+    ADD A2, A2, #1
 
-    SUB V2, V2, #1
+    SUB V2, V2, #2
     // pre-- A3: x2
     ADD A3, A1, V2 // x * 20 + 19 = x2
     // pre-- A4: y2
@@ -312,12 +314,37 @@ GoL_poll_pressed_key:
         LDR A2, =#0xf0
         CMP A1, A2 // when its a released key, skip next key
         BNE done_polling_pressed_key
-            read_key_released:
+            read_key_released: // reread the next key
             LDR A1, =key_pressed
             BL read_PS2_data_ASM
             CMP A1, #1
             BNE read_key_released
             LDR A1, key_pressed
+
+            PUSH {A1, A2, V1}
+            // erase current position of the star before changing position
+
+            // Pre-- A1: x
+            LDR A1, cursor_x
+            // Pre-- A2: y
+            LDR A2, cursor_y
+            
+            // First get the current value to know which color to use 
+            BL GoL_state_of_tile
+            CMP A1, #0
+            LDREQ V1, =#1366
+            LDRNE V1, =#0
+
+            // Fills the rectangle of grid location (x, y) with color c
+            // Grid: 0 ≤ x < 16, 0 ≤ y < 12
+            // Pre-- A1: x
+            LDR A1, cursor_x
+            // Pre-- A2: y
+            LDR A2, cursor_y
+            // Pre-- V1: color
+            // during V2: temp holds 20
+            BL GoL_fill_gridxy_ASM
+            POP {A1, A2, V1}
         
             LDR A2, =#0x1d
             CMP A1, A2 // check if it is W
@@ -513,6 +540,36 @@ Cursor_draw_cursor:
     BL VGA_draw_horizontal_line
 
     POP {A1-V3, LR}
+    BX LR
+
+// Get the value(0 or 1) of the tile
+// Pre--A1: column index (x) 
+// Pre--A2: row index (y)
+// Post-A1: return the state of tile
+GoL_state_of_tile:
+    PUSH {A2-V2, LR}
+
+    LDR A3, =GoLBoard
+
+    // Get the offset of the address to access specific row (row_index * 4)
+    MOV A4, #4
+    MUL A2, A2, A4
+
+    // Load the row
+    LDR V1, [A3, A2]
+
+    // Get the cell with the column index
+    // Shift = total number of column - column index
+    MOV V2, #15
+    SUB A1, V2, A1
+
+    LSR V1, A1
+
+    TST V1, #1 // Is the least significant bit 1 ?
+    MOVEQ A1, #0 // if its not 1, return 0
+    MOVNE A1, #1 // if it is 1, return 1
+
+    POP {A2-V2, LR}
     BX LR
 
 
