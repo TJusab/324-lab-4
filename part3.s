@@ -321,30 +321,13 @@ GoL_poll_pressed_key:
             BNE read_key_released
             LDR A1, key_pressed
 
-            PUSH {A1, A2, V1}
+            PUSH {A1, A2}
             // erase current position of the star before changing position
-
-            // Pre-- A1: x
             LDR A1, cursor_x
-            // Pre-- A2: y
             LDR A2, cursor_y
+            BL GoL_refresh_fill_of_tile
             
-            // First get the current value to know which color to use 
-            BL GoL_state_of_tile
-            CMP A1, #0
-            LDREQ V1, =#1366
-            LDRNE V1, =#0
-
-            // Fills the rectangle of grid location (x, y) with color c
-            // Grid: 0 ≤ x < 16, 0 ≤ y < 12
-            // Pre-- A1: x
-            LDR A1, cursor_x
-            // Pre-- A2: y
-            LDR A2, cursor_y
-            // Pre-- V1: color
-            // during V2: temp holds 20
-            BL GoL_fill_gridxy_ASM
-            POP {A1, A2, V1}
+            POP {A1, A2}
         
             LDR A2, =#0x1d
             CMP A1, A2 // check if it is W
@@ -397,6 +380,20 @@ GoL_poll_pressed_key:
                     BL Cursor_draw_cursor
                     B done_polling_pressed_key
             not_d_pressed:
+
+            LDR A2, =#0x31
+            CMP A1, A2
+            BNE not_n_pressed
+                PUSH {A1, A2}
+                LDR A1, cursor_x
+                LDR A2, cursor_y
+                BL GoL_toggle_state_of_tile // Toggle tile at the position of the cursor
+                BL GoL_refresh_fill_of_tile // Draw new state
+                POP {A1, A2}
+            not_n_pressed:
+            
+            // if another key is pressed
+            BL Cursor_draw_cursor
 
     done_polling_pressed_key:
     POP {A1, A2, LR}
@@ -563,7 +560,7 @@ GoL_state_of_tile:
     MOV V2, #15
     SUB A1, V2, A1
 
-    LSR V1, A1
+    LSR V1, A1 // shift
 
     TST V1, #1 // Is the least significant bit 1 ?
     MOVEQ A1, #0 // if its not 1, return 0
@@ -572,6 +569,57 @@ GoL_state_of_tile:
     POP {A2-V2, LR}
     BX LR
 
+// Get the value(0 or 1) of the tile
+// Pre--A1: column index (x) 
+// Pre--A2: row index (y)
+GoL_toggle_state_of_tile:
+    PUSH {A1-V2, LR}
+
+    LDR A3, =GoLBoard
+
+    // Get the offset of the address to access specific row (row_index * 4)
+    MOV A4, #4
+    MUL A2, A2, A4
+
+    // Load the row
+    LDR V1, [A3, A2]
+
+    // Get the cell with the column index
+    // Shift = total number of column - column index
+    MOV V2, #15
+    SUB A1, V2, A1
+    
+    MOV V2, #1
+    LSL V2, A1 // shift
+
+    EOR V1, V1, V2
+    
+    // Load the new row
+    STR V1, [A3, A2]
+
+    POP {A1-V2, LR}
+    BX LR
+
+// Recolor the tile at (x,y)
+// Pre--A1: column index (x) 
+// Pre--A2: row index (y)
+GoL_refresh_fill_of_tile:
+    PUSH {A1-A3, V1, LR}
+    // Make a copy
+    ADD A3, A1, #0
+    
+    // First get the current value to know which color to use 
+    BL GoL_state_of_tile
+    CMP A1, #0
+    LDREQ V1, =#1366
+    LDRNE V1, =#0
+
+    // Fills the rectangle of grid location (x, y) with color c
+    ADD A1, A3, #0 // Restore with copy
+    BL GoL_fill_gridxy_ASM
+
+    POP {A1-A3, V1, LR}
+    BX LR
 
 //------------------------// VGA & PS2 drivers //------------------------//
 
