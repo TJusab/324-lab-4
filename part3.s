@@ -381,7 +381,7 @@ GoL_poll_pressed_key:
                     B done_polling_pressed_key
             not_d_pressed:
 
-            LDR A2, =#0x31
+            LDR A2, =#0x29
             CMP A1, A2
             BNE not_n_pressed
                 PUSH {A1, A2}
