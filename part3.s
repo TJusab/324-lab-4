@@ -3,7 +3,22 @@
 GoLBoard:
 //     x 0 1 2 3 4 5 6 7 8 9 a b c d e f y
 .word 0b0000000000000000 // 0
-.word 0b0000000000000000 // 1
+.word 0b0011100000000000 // 1
+.word 0b0000000100000000 // 2
+.word 0b0000000100000000 // 3
+.word 0b0000000100000000 // 4
+.word 0b0000000111110000 // 5
+.word 0b0000111110000000 // 6
+.word 0b0000000010000000 // 7
+.word 0b0000000010000000 // 8
+.word 0b0000000010000000 // 9
+.word 0b0000000000000000 // a
+.word 0b0000000000000000 // b
+
+next_state_GoLBoard:
+//     x 0 1 2 3 4 5 6 7 8 9 a b c d e f y
+.word 0b0000000000000000 // 0
+.word 0b0011100000000000 // 1
 .word 0b0000000100000000 // 2
 .word 0b0000000100000000 // 3
 .word 0b0000000100000000 // 4
@@ -384,23 +399,23 @@ GoL_poll_pressed_key:
             LDR A2, =#0x29
             CMP A1, A2
             BNE not_space_pressed
-                PUSH {A1, A2}
+                PUSH {A1, A2, A3}
                 LDR A1, cursor_x
                 LDR A2, cursor_y
+                LDR A3, =GoLBoard
                 BL GoL_toggle_state_of_tile // Toggle tile at the position of the cursor
+                // Also update the next state as it is supposed to reflect the current state before applying the rules
+                LDR A3, =next_state_GoLBoard
+                BL GoL_toggle_state_of_tile // Toggle tile at the position of the cursor
+
                 BL GoL_refresh_fill_of_tile // Draw new state
-                POP {A1, A2}
+                POP {A1, A2, A3}
             not_space_pressed:
             
             LDR A2, =#0x31
             CMP A1, A2
             BNE not_n_pressed
-                PUSH {A1, A2}
-                LDR A1, cursor_x
-                LDR A2, cursor_y
-                BL GoL_get_active_neighbors 
-                pause:
-                POP {A1, A2}
+                BL GoL_activate_next_state
             not_n_pressed:
 
             cannot_move:
@@ -584,10 +599,9 @@ GoL_state_of_tile:
 // Get the value(0 or 1) of the tile
 // Pre--A1: column index (x) 
 // Pre--A2: row index (y)
+// Pre--A3: address of the board to toggle
 GoL_toggle_state_of_tile:
     PUSH {A1-V2, LR}
-
-    LDR A3, =GoLBoard
 
     // Get the offset of the address to access specific row (row_index * 4)
     MOV A4, #4
@@ -637,12 +651,15 @@ GoL_refresh_fill_of_tile:
 // Pre--A1: column index (x) 
 // Pre--A2: row index (y)
 // Post--A1: number of active neighbors
+// Post--A2: if current tile is active
 // Grid: 0 ≤ x < 16, 0 ≤ y < 12
 GoL_get_active_neighbors:
-    PUSH {A2-V1, LR}
+    PUSH {A3-V2, LR}
 
     // Set the counter to 0
     MOV V1, #0
+
+    MOV V2, #0 // current tile
 
     // verify current tile
     // - - -
@@ -655,7 +672,7 @@ GoL_get_active_neighbors:
     PUSH {A1}
     BL GoL_state_of_tile 
     CMP A1, #1
-    ADDEQ V1, V1, #1
+    ADDEQ V2, V2, #1
     POP {A1} // Restore A1
 
     // - - -
@@ -792,7 +809,79 @@ GoL_get_active_neighbors:
 
 
     ADD A1, V1, #0
-    POP {A2-V1, LR}
+    ADD A2, V2, #0
+    POP {A3-V2, LR}
+    BX LR
+
+
+// Go through all cells and apply the game logic
+GoL_activate_next_state:
+    PUSH {A1-A4, LR}
+    // First, loop through every cells of the grid
+    // Grid: 0 ≤ x < 16, 0 ≤ y < 12
+    // For every column
+    MOV A1, #0
+    for_every_column_in_the_grid:
+        MOV A2, #0
+        for_every_row_in_the_grid:
+            PUSH {A1, A2}
+            BL GoL_get_active_neighbors // Get in A1
+            // COPY values into A3, A4
+            ADD A3, A1, #0 // A3, neighbors state
+            ADD A4, A2, #0  // A4 = current state
+            POP {A1, A2} // Because I need the current position
+
+            CMP A4, #1 // Is the current state active
+            BEQ active
+                CMP A3, #3 // 4.Any inactive cell with exactly 3 active neighbors becomes active.
+                
+                LDREQ A3, =next_state_GoLBoard
+                BLEQ GoL_toggle_state_of_tile
+                B continue_next_cell
+
+            active:
+            // Any active cell with 0 or 1 active neighbors becomes inactive
+            CMP A3, #2
+            BEQ continue_next_cell
+            CMP A3, #3
+            BEQ continue_next_cell
+                // else dies
+                LDR A3, =next_state_GoLBoard
+                BL GoL_toggle_state_of_tile
+
+            continue_next_cell:
+            ADD A2, A2, #1
+            CMP A2, #12
+        BNE for_every_row_in_the_grid
+
+
+        ADD A1, A1, #1
+        CMP A1, #16
+    BNE for_every_column_in_the_grid
+    
+    // Copy the next state into current board state
+    LDR A1, =GoLBoard
+    LDR A2, =next_state_GoLBoard
+    
+    MOV A3, #0 // row counter
+    copy_every_row:
+        PUSH {A3}
+        MOV A4, #4
+        MUL A3, A3, A4 // Multiply 0 by 4 to get the offset
+        LDR A4, [A2, A3] // Load the row of the next state GoLBoard
+        STR A4, [A1, A3] // Store it into the current GoLBoard
+
+        POP {A3}
+        ADD A3, A3, #1
+        CMP A3, #12
+    BLT copy_every_row // check if we are done copying every row
+    
+    // Redraw the board
+    MOV A1, #0
+    LDR A3, =#1366
+    BL GoL_draw_board_ASM
+
+    POP {A1-A4, LR}
     BX LR
 
 
