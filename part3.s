@@ -192,7 +192,7 @@ GoL_draw_grid_ASM:
         BL VGA_draw_vertical_line
 
         ADD A1, #20
-        CMP A1, A3 // if x1<=239, keep drawing vertical lines
+        CMP A1, A3 // if x1<=319, keep drawing vertical lines
         BLE loop_draw_every_vertical_lines
 
 
@@ -335,7 +335,7 @@ GoL_poll_pressed_key:
                 LDR A3, =cursor_y
                 LDR A4, cursor_y
                 CMP A4, #0
-                BLE done_polling_pressed_key // do not move up if y<=0
+                BLE cannot_move // do not move up if y<=0
                     SUB A4, A4, #1 // Move up
                     STR A4, [A3] // Store new value of cursor
                     BL Cursor_draw_cursor
@@ -348,7 +348,7 @@ GoL_poll_pressed_key:
                 LDR A3, =cursor_y
                 LDR A4, cursor_y
                 CMP A4, #11
-                BGE done_polling_pressed_key // do not move up if y>=12
+                BGE cannot_move // do not move up if y>=12
                     ADD A4, A4, #1 // Move down
                     STR A4, [A3] // Store new value of cursor
                     BL Cursor_draw_cursor
@@ -361,7 +361,7 @@ GoL_poll_pressed_key:
                 LDR A3, =cursor_x
                 LDR A4, cursor_x
                 CMP A4, #0
-                BLE done_polling_pressed_key // do not move up if x<=0
+                BLE cannot_move // do not move up if x<=0
                     SUB A4, A4, #1 // Move left
                     STR A4, [A3] // Store new value of cursor
                     BL Cursor_draw_cursor
@@ -374,7 +374,7 @@ GoL_poll_pressed_key:
                 LDR A3, =cursor_x
                 LDR A4, cursor_x
                 CMP A4, #15
-                BGE done_polling_pressed_key // do not move up if x>=15
+                BGE cannot_move // do not move up if x>=15
                     ADD A4, A4, #1 // Move right
                     STR A4, [A3] // Store new value of cursor
                     BL Cursor_draw_cursor
@@ -383,15 +383,27 @@ GoL_poll_pressed_key:
 
             LDR A2, =#0x29
             CMP A1, A2
-            BNE not_n_pressed
+            BNE not_space_pressed
                 PUSH {A1, A2}
                 LDR A1, cursor_x
                 LDR A2, cursor_y
                 BL GoL_toggle_state_of_tile // Toggle tile at the position of the cursor
                 BL GoL_refresh_fill_of_tile // Draw new state
                 POP {A1, A2}
-            not_n_pressed:
+            not_space_pressed:
             
+            LDR A2, =#0x31
+            CMP A1, A2
+            BNE not_n_pressed
+                PUSH {A1, A2}
+                LDR A1, cursor_x
+                LDR A2, cursor_y
+                BL GoL_get_active_neighbors 
+                pause:
+                POP {A1, A2}
+            not_n_pressed:
+
+            cannot_move:
             // if another key is pressed
             BL Cursor_draw_cursor
 
@@ -620,6 +632,169 @@ GoL_refresh_fill_of_tile:
 
     POP {A1-A3, V1, LR}
     BX LR
+
+// Get the number of active neighbors a specific tile has
+// Pre--A1: column index (x) 
+// Pre--A2: row index (y)
+// Post--A1: number of active neighbors
+// Grid: 0 ≤ x < 16, 0 ≤ y < 12
+GoL_get_active_neighbors:
+    PUSH {A2-V1, LR}
+
+    // Set the counter to 0
+    MOV V1, #0
+
+    // verify current tile
+    // - - -
+    // - X -
+    // - - -
+
+    // Pre--A1: column index (x) 
+    // Pre--A2: row index (y)
+    // Post-A1: return the state of tile
+    PUSH {A1}
+    BL GoL_state_of_tile 
+    CMP A1, #1
+    ADDEQ V1, V1, #1
+    POP {A1} // Restore A1
+
+    // - - -
+    // X x -
+    // - - -
+    SUB A1, A1, #1
+    // input check, is it in the boundaries
+    MOV A3, #0
+    CMP A1, A3
+    BLT skip_left_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_left_tile:
+
+    // X - -
+    // x x -
+    // - - -
+    SUB A2, A2, #1
+    // input check, is it in the boundaries
+    MOV A3, #0
+    CMP A1, A3
+    BLT skip_top_left_tile
+    CMP A2, A3
+    BLT skip_top_left_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_top_left_tile:
+
+    // x - -
+    // x x -
+    // X - -
+    ADD A2, A2, #2
+    // input check, is it in the boundaries
+    // input check, is it in the boundaries
+    MOV A3, #0
+    CMP A1, A3
+    BLT skip_bottom_left_tile
+    MOV A3, #11
+    CMP A2, A3
+    BGT skip_bottom_left_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_bottom_left_tile:
+
+    // x - -
+    // x x -
+    // x X -
+    ADD A1, A1, #1
+    // input check, is it in the boundaries
+    MOV A3, #11
+    CMP A2, A3
+    BGT skip_bottom_middle_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_bottom_middle_tile:
+
+    // x X -
+    // x x -
+    // x x -
+    SUB A2, A2, #2
+    // input check, is it in the boundaries
+    MOV A3, #0
+    CMP A2, A3
+    BLT skip_top_middle_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_top_middle_tile:
+    
+    // x x X
+    // x x -
+    // x x -
+    ADD A1, A1, #1
+    // input check, is it in the boundaries
+    MOV A3, #15
+    CMP A1, A3
+    BGT skip_top_right_tile
+    MOV A3, #0
+    CMP A2, A3
+    BLT skip_top_right_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_top_right_tile:
+
+    // x x x
+    // x x X
+    // x x -
+    ADD A2, A2, #1
+    // input check, is it in the boundaries
+    MOV A3, #15
+    CMP A1, A3
+    BGT skip_right_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_right_tile:
+
+    // x x x
+    // x x x
+    // x x X
+    ADD A2, A2, #1
+    // input check, is it in the boundaries
+    LDR A3, =#319
+    CMP A1, A3
+    BGT skip_bottom_right_tile
+    LDR A3, =#239
+    CMP A2, A3
+    BGT skip_bottom_right_tile
+        PUSH {A1}
+        BL GoL_state_of_tile 
+        CMP A1, #1
+        ADDEQ V1, V1, #1
+        POP {A1} // Restore A1
+    skip_bottom_right_tile:
+
+
+    ADD A1, V1, #0
+    POP {A2-V1, LR}
+    BX LR
+
 
 //------------------------// VGA & PS2 drivers //------------------------//
 
