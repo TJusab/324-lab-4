@@ -1,3 +1,5 @@
+/* This part 3 was made by Julia Grenier */
+/* It uses part 1 and part 2 made by Tayba Jusab */
 .global _start
 
 GoLBoard:

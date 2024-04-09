@@ -1,3 +1,4 @@
+/* This part 1 was made by Tayba Jusab */
 .global _start
 
 .equ PIXEL_ADDR, 0xC8000000
